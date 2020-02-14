@@ -1,4 +1,4 @@
-# EBL_SWG_circuit_Libray
+# EBL_SWG_circuit_Libray1
 This code was made as addon SWG-based photonic components for the SiEPIC PDK (These components currently can only be realized by EBL facilities). 
 
 ## Requirements
