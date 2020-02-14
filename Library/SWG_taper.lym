@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut/>
+ <show-in-menu>false</show-in-menu>
+ <group-name/>
+ <menu-path/>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text>import pya
+from pya import *
+import math
+from SiEPIC.utils import get_technology, get_technology_by_name
+from SiEPIC.scripts import path_to_waveguide
+from SiEPIC.extend import to_itype
+
+
+MODULE_NUMPY = True
+
+dbu = 0.001
+
+class SWG_taper(pya.PCellDeclarationHelper):
+    def __init__(self):
+
+      # Important: initialize the super class
+      super(SWG_taper, self).__init__()
+      TECHNOLOGY = get_technology_by_name('EBeam')
+
+      # declare the parameters
+      self.param("pitch", self.TypeDouble, "Period [um]", default = 0.2)
+      self.param("ff", self.TypeDouble, "Duty Cycle", default = 0.5)
+      self.param("w1", self.TypeDouble, "SWG Width_1 [um]", default = 0.8)
+      self.param("w2", self.TypeDouble, "SWG Width_2 [um]", default = 0.3)     
+      self.param("Length", self.TypeDouble, "SWG taper Length [um]", default = 10)
+      self.param("layer", self.TypeLayer, "Layer", default = TECHNOLOGY['Waveguide'])
+      self.param("pinrec", self.TypeLayer, "PinRec Layer", default = TECHNOLOGY['PinRec'])
+      self.param("devrec", self.TypeLayer, "DevRec Layer", default = TECHNOLOGY['DevRec'])
+
+    def display_text_impl(self):
+      # Provide a descriptive text for the cell
+      return "SWG_taper_length_%.3f um" % \
+      (self.Length)
+
+    def coerce_parameters_impl(self):
+       pass
+
+    def can_create_from_shape(self, layout, shape, layer):
+        return False
+        
+    def produce_impl(self):
+      from SiEPIC._globals import PIN_LENGTH
+      # This is the main part of the implementation: create the layout
+
+      # fetch the parameters
+      dbu = self.layout.dbu
+      ly = self.layout
+      shapes = self.cell.shapes
+      LayerSi = self.layer
+      LayerSiN = ly.layer(LayerSi)
+      LayerPinRecN = ly.layer(self.pinrec)
+      LayerDevRecN = ly.layer(self.devrec)
+      
+      #variables for user to design
+      pitch = self.pitch
+      w1 = self.w1
+      w2 = self.w2
+      ff = self.ff
+      Length = self.Length
+      
+      s1 = pitch*ff #silicon
+      s2 = pitch-s1 #gap
+      
+      # define the minimum length of the taper
+      if Length &lt;= 2*pitch:
+        Length = pitch*3
+        print('invalid length of SWG waveguide, set length at least 3*period of SWG')
+        
+      constant = math.ceil(Length/(s1+s2))
+      if Length % (s1+s2) != 0:
+        Length = constant*(s1+s2)    
+        print("adjusted taper length to" +str(Length)+ "um")       
+      
+      # start with the first Si block in the left bottom of the taper
+        ydelta = ((w1-w2)/2)/constant   
+        
+        xo = [0,s1,s1,0]
+        yo = [0,0,w1,w1]
+        dpts=[pya.DPoint(xo[i], yo[i]) for i in range(len(xo))]
+        dpolygon = DPolygon(dpts)
+        element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+        shapes(LayerSiN).insert(element)   
+
+        # put the taper blocks from left to right
+        for ii in range(0,int(math.ceil(constant))): # ceil is the integer larger than the input value
+      
+          ynext = [yo[0]+ii*ydelta, yo[1]+ii*ydelta, yo[2]-ii*ydelta, yo[3]-ii*ydelta]
+          xnext = [xo[j]+ii*pitch for j in range(len(xo))]  
+
+      
+          dpts=[pya.DPoint(xnext[i], ynext[i]) for i in range(len(xo))]
+          dpolygon = DPolygon(dpts)
+          element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+          shapes(LayerSiN).insert(element)
+          
+      #DEV BOX
+      dev = Box(0-(s2/2)/dbu, 0, self.cell.bbox().width()+(s2/2)/dbu,w1/dbu)
+      shapes(LayerDevRecN).insert(dev)
+
+      # Create the pins on the waveguides, as short paths:
+      #from SiEPIC._globals import PIN_LENGTH as pin_length
+      pin_length = (s2/2)/dbu
+      Length = to_itype(Length/2,dbu)
+  
+      #Pin1
+      t = Trans(Trans.R90, 0-(s2/2)/dbu,(w1/2)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+      pin_t = pin.transformed(t)
+      shapes(LayerPinRecN).insert(pin_t)
+      text = Text ("pin1", t)
+      shape = shapes(LayerPinRecN).insert(text)
+      shape.text_size = 0.4/dbu
+
+      #Pin2
+      t = Trans(Trans.R90, xnext[1]/dbu+(s2/2)/dbu,ynext[0]/dbu+((ynext[2]-ynext[1])/2)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], ((ynext[2]-ynext[1]))/dbu) 
+      pin_t = pin.transformed(t)
+      shapes(LayerPinRecN).insert(pin_t)
+      text = Text ("pin2", t)
+      shape = shapes(LayerPinRecN).insert(text)
+      shape.text_size = 0.4/dbu
+                 
+      
+class SiEPIC_EBeam_dev(Library):
+  """
+  The library where we will put the PCells and GDS into
+  """
+
+  def __init__(self):
+
+    tech_name = 'EBeam'
+    library = tech_name+'-STEPHDEV-Eluan'
+
+    print("Initializing '%s' Library." % library)
+
+
+    # Set the description
+# windows only allows for a fixed width, short description
+    self.description = ""
+# OSX does a resizing:
+#    self.description = "Beta layouts only"
+
+    # Create the PCell declarations
+    self.layout().register_pcell("SWG_taper", SWG_taper()) ## change the name for the specific compount
+
+    # Register us the library with the technology name
+    # If a library with that name already existed, it will be replaced then.
+    self.register(library)
+
+# Setup path to load .py files in present folder:
+#import os, inspect, sys
+#path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+#if not path in sys.path:
+#  sys.path.append(path)
+
+# Instantiate and register the library
+SiEPIC_EBeam_dev()
+</text>
+</klayout-macro>
