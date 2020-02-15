@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut/>
+ <show-in-menu>false</show-in-menu>
+ <group-name/>
+ <menu-path/>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text>import pya
+  
+##############################################
+
+# Import functions from SiEPIC-Tools, and get technology details
+from SiEPIC.utils import select_paths, get_layout_variables
+TECHNOLOGY, lv, ly, cell = get_layout_variables()
+dbu = ly.dbu
+from SiEPIC.extend import to_itype
+
+# Layer mapping:
+LayerSiN = ly.layer(TECHNOLOGY['Si'])
+LayerDevRecN = ly.layer(TECHNOLOGY['DevRec'])
+LayerPinRecN = ly.layer(TECHNOLOGY['PinRec'])
+#fpLayerN = cell.layout().layer(TECHNOLOGY['FloorPlan'])
+TextLayerN = cell.layout().layer(TECHNOLOGY['Text'])
+
+# Create a sub-cell for our SWG-taper layout
+top_cell = cell
+cell = cell.layout().create_cell("SWG_crossing")
+t = Trans(Trans.R0, 0, 0)
+  
+# place the cell in the top cell
+top_cell.insert(CellInstArray(cell.cell_index(), t))
+
+
+# First SWG tapers imported:
+pcell= ly.create_cell("SWG_taper","EBeam-STEPHDEV-Eluan", {"pitch": 0.24, "w1": 0.5, "w2": 0.4, "ff": 0.5, "Length":10,"pinrec":pya.LayerInfo(0, 0), "devrec":pya.LayerInfo(0, 0)}) ## how to extact the params from the PCell
+t = Trans(Trans.R0, 0, 0)
+cell.insert(CellInstArray(pcell.cell_index(),t))
+
+Length_taper = 10.08 ## how to extract data from PCell?
+
+#Second SWG taper:
+t = Trans(Trans.R90, Length_taper/dbu+0.35/dbu, -Length_taper/dbu+0.15/dbu)
+cell.insert(CellInstArray(pcell.cell_index(),t))
+
+#Third SWG taper:
+t = Trans(Trans.R180, (2*Length_taper)/dbu+0.2/dbu, 0.5/dbu)
+cell.insert(CellInstArray(pcell.cell_index(),t)) 
+
+#Forth SWG taper:
+t = Trans(Trans.R270, Length_taper/dbu-0.15/dbu, Length_taper/dbu+0.35/dbu)
+cell.insert(CellInstArray(pcell.cell_index(),t))  
+
+# The middle SWG square drawing:
+#LayerSiN = pya.LayerInfo(1, 0)
+xo = [Length_taper/dbu, Length_taper/dbu+0.2/dbu, Length_taper/dbu+0.2/dbu, Length_taper/dbu]
+yo = [0.15/dbu,0.15/dbu,0.35/dbu,0.35/dbu]
+dpts=[pya.DPoint(xo[i], yo[i]) for i in range(len(xo))]
+dpolygon = DPolygon(dpts)
+element = Polygon.from_dpoly(dpolygon)
+cell.shapes(LayerSiN).insert(element)   
+
+#DEV BOX
+dev = Box(0, -Length_taper/dbu+0.15/dbu, 2*Length_taper/dbu+0.2/dbu,Length_taper/dbu+0.35/dbu)
+cell.shapes(LayerDevRecN).insert(dev)
+
+
+# Create the pins
+#from SiEPIC._globals import PIN_LENGTH as pin_length
+s2 = 0.24/2
+w1 = 0.5
+pin_length = (s2/2)/dbu
+#Length = to_itype(Length/2,dbu)
+
+#Pin1
+t = Trans(Trans.R90, 0-(s2/2)/dbu,(w1/2)/dbu)
+pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+pin_t = pin.transformed(t)
+cell.shapes(LayerPinRecN).insert(pin_t)
+text = Text ("pin1", t)
+shape = cell.shapes(LayerPinRecN).insert(text)
+shape.text_size = 0.4/dbu  
+
+#Pin2
+t = Trans(Trans.R90, (2*Length_taper)/dbu+0.2/dbu+(s2/2)/dbu, 0.5/dbu-(w1/2)/dbu)
+pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+pin_t = pin.transformed(t)
+cell.shapes(LayerPinRecN).insert(pin_t)
+text = Text ("pin2", t)
+shape = cell.shapes(LayerPinRecN).insert(text)
+shape.text_size = 0.4/dbu  
+
+
+#Pin3
+t = Trans(Trans.R0, Length_taper/dbu+0.35/dbu-(w1/2)/dbu, -Length_taper/dbu+0.15/dbu-(s2/2)/dbu)
+pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+pin_t = pin.transformed(t)
+cell.shapes(LayerPinRecN).insert(pin_t)
+text = Text ("pin3", t)
+shape = cell.shapes(LayerPinRecN).insert(text)
+shape.text_size = 0.4/dbu 
+
+
+#Pin4
+t = Trans(Trans.R0, Length_taper/dbu-0.15/dbu+(w1/2)/dbu, Length_taper/dbu+0.35/dbu+(s2/2)/dbu)
+pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+pin_t = pin.transformed(t)
+cell.shapes(LayerPinRecN).insert(pin_t)
+text = Text ("pin4", t)
+shape = cell.shapes(LayerPinRecN).insert(text)
+shape.text_size = 0.4/dbu 
+
+</text>
+</klayout-macro>

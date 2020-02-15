@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut/>
+ <show-in-menu>false</show-in-menu>
+ <group-name/>
+ <menu-path/>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text>import pya
+from pya import *
+import math
+from SiEPIC.utils import get_technology, get_technology_by_name
+from SiEPIC.scripts import path_to_waveguide
+from SiEPIC.extend import to_itype
+
+
+MODULE_NUMPY = True
+
+dbu = 0.001
+
+class SWG_MMI(pya.PCellDeclarationHelper):
+    def __init__(self):
+
+      # Important: initialize the super class
+      super(SWG_MMI, self).__init__()
+      TECHNOLOGY = get_technology_by_name('EBeam')
+
+      # declare the parameters
+      self.param("pitch", self.TypeDouble, "Period [um]", default = 0.2)
+      self.param("ff", self.TypeDouble, "Duty Cycle", default = 0.5)
+      self.param("w1", self.TypeDouble, "SWG Width_1 [um]", default = 0.5)
+      self.param("w2", self.TypeDouble, "SWG Width_2 [um]", default = 1)     
+      self.param("Length", self.TypeDouble, "SWG taper Length [um]", default = 10)
+      self.param("MMIL", self.TypeDouble, "MMI Length [um]", default = 14)
+      self.param("MMIW", self.TypeDouble, "MMI Width [um]", default = 3.25)
+      self.param("Distance", self.TypeDouble, "Port Distance [um]", default = 1)
+      self.param("layer", self.TypeLayer, "Layer", default = TECHNOLOGY['Waveguide'])
+      self.param("pinrec", self.TypeLayer, "PinRec Layer", default = TECHNOLOGY['PinRec'])
+      self.param("devrec", self.TypeLayer, "DevRec Layer", default = TECHNOLOGY['DevRec'])
+
+    def display_text_impl(self):
+      # Provide a descriptive text for the cell
+      return "SWG_MMI_length_%.3f um" % \
+      (self.MMIL)
+
+    def coerce_parameters_impl(self):
+       pass
+
+    def can_create_from_shape(self, layout, shape, layer):
+        return False
+        
+    def produce_impl(self):
+      from SiEPIC._globals import PIN_LENGTH
+      # This is the main part of the implementation: create the layout
+
+      # fetch the parameters
+      dbu = self.layout.dbu
+      ly = self.layout
+      shapes = self.cell.shapes
+      LayerSi = self.layer
+      LayerSiN = ly.layer(LayerSi)
+      LayerPinRecN = ly.layer(self.pinrec)
+      LayerDevRecN = ly.layer(self.devrec)
+
+
+      #variables for user to design
+      pitch = self.pitch
+      w1 = self.w1
+      w2 = self.w2
+      ff = self.ff
+      Length = self.Length
+      MMI_L = self.MMIL
+      MMI_W = self.MMIW
+      d = self.Distance
+      
+      
+      s1 = pitch*ff #silicon
+      s2 = pitch-s1 #gap
+
+      # define the minimum length of the taper and MMI
+      if Length &lt;= 2*pitch:
+        Length = pitch*3
+        print('invalid length of SWG taper, set length at least 3*period of SWG')
+      if MMI_L &lt;= 2*pitch:
+        MMI_L = 3*pitch
+        print('invalid length of SWG MMI, set length at least 3*period of SWG')    
+        
+      constant_t = math.ceil(Length/(s1+s2))
+      if Length % (s1+s2) != 0:
+        Length = constant_t*(s1+s2)    
+        print("adjusted taper length to" +str(Length)+ "um")       
+      
+      # start with the first Si block in the left bottom of the taper
+        ydelta = ((w1-w2)/2)/constant_t   
+        
+        xlb = [0,s1,s1,0]
+        ylb = [0,0,w1,w1]
+        dpts=[pya.DPoint(xlb[i], ylb[i]) for i in range(len(xlb))]
+        dpolygon = DPolygon(dpts)
+        element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+        shapes(LayerSiN).insert(element)   
+                
+        # put the taper blocks from left to right (first left-bottom taper)
+        for ii in range(0,int(math.ceil(constant_t))): # ceil is the integer larger than the input value
+      
+          ynext = [ylb[0]+ii*ydelta, ylb[1]+ii*ydelta, ylb[2]-ii*ydelta, ylb[3]-ii*ydelta]
+          xnext = [xlb[j]+ii*pitch for j in range(len(xlb))]  
+
+      
+          dpts=[pya.DPoint(xnext[i], ynext[i]) for i in range(len(xlb))]
+          dpolygon = DPolygon(dpts)
+          element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+          shapes(LayerSiN).insert(element)
+
+              
+        # put the taper blocks from left to right (first left-top taper)
+        #ylt = [w1+d, w1+d, 2*w1+d,2*w1+d]
+        ylt= [ylb[i]+d for i in range(len(ylb))] 
+        for ii in range(0,int(math.ceil(constant_t))): # ceil is the integer larger than the input value
+      
+          ynext = [ylt[0]+ii*ydelta, ylt[1]+ii*ydelta, ylt[2]-ii*ydelta, ylt[3]-ii*ydelta]
+          xnext = [xlb[j]+ii*pitch for j in range(len(xlb))]  
+
+          dpts=[pya.DPoint(xnext[i], ynext[i]) for i in range(len(xlb))]
+          dpolygon = DPolygon(dpts)
+          element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+          shapes(LayerSiN).insert(element) 
+
+      # put the MMI body
+      if MMI_L % (s1+s2) != 0:
+        constant_m = math.ceil(MMI_L/(s1+s2))
+        MMI_L = constant_m*(s1+s2)    
+
+        print("adjusted MMI length to" +str(MMI_L)+ "um")  
+       
+        xm = [constant_t*pitch, constant_t*pitch+s1, constant_t*pitch+s1, constant_t*pitch]
+
+        for ii in range(0,int(math.ceil(constant_m))): # ceil is the integer larger than the input value
+      
+          ymnext = [(w1+d)/2-MMI_W/2, (w1+d)/2-MMI_W/2, (w1+d)/2+MMI_W/2, (w1+d)/2+MMI_W/2]
+          xmnext = [xm[j]+ii*pitch for j in range(len(xlb))]  
+
+          dpts=[pya.DPoint(xmnext[i], ymnext[i]) for i in range(len(xlb))]
+          dpolygon = DPolygon(dpts)
+          element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+          shapes(LayerSiN).insert(element) 
+
+        # put the taper blocks from left to right (first right-bottom taper)
+
+        w2new = w1-(constant_t-1)*2*ydelta
+        yrb = [-(w2new-w1)/2,-(w2new-w1)/2,w2new-(w2new-w1)/2,w2new-(w2new-w1)/2]
+        print(yrb)
+
+        for ii in range(0,int(math.ceil(constant_t))): # ceil is the integer larger than the input value
+          ydelta = ((w2-w1)/2)/constant_t 
+          ynext = [yrb[0]+ii*ydelta, yrb[1]+ii*ydelta, yrb[2]-ii*ydelta, yrb[3]-ii*ydelta]
+          xnext = [xmnext[j]+(ii+1)*pitch for j in range(len(xlb))]  
+
+      
+          dpts=[pya.DPoint(xnext[i], ynext[i]) for i in range(len(xlb))]
+          dpolygon = DPolygon(dpts)
+          element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+          shapes(LayerSiN).insert(element)            
+          
+         # put the taper blocks from left to right (first right-top taper)
+        yrt = [yrb[i]+d for i in range(len(yrb))]    
+        for ii in range(0,int(math.ceil(constant_t))): # ceil is the integer larger than the input value
+ 
+          ynext = [yrt[0]+ii*ydelta, yrt[1]+ii*ydelta, yrt[2]-ii*ydelta, yrt[3]-ii*ydelta]
+          xnext = [xmnext[j]+(ii+1)*pitch for j in range(len(xlb))]  
+
+          dpts=[pya.DPoint(xnext[i], ynext[i]) for i in range(len(xlb))]
+          dpolygon = DPolygon(dpts)
+          element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+          shapes(LayerSiN).insert(element)   
+                 
+      #DEV BOX
+      dev = Box(0, ((w1+d)/2-MMI_W/2)/dbu, self.cell.bbox().width(),((w1+d)/2+MMI_W/2)/dbu)
+      shapes(LayerDevRecN).insert(dev)          
+
+      
+      # add Pins
+      pin_length = (s2/2)/dbu
+      #Length = to_itype(Length/2,dbu)
+  
+      #Pin1
+      t = Trans(Trans.R90, -(s2/2)/dbu, (w1/2)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+      pin_t = pin.transformed(t)
+      shapes(LayerPinRecN).insert(pin_t)
+      text = Text ("pin1", t)
+      shape = shapes(LayerPinRecN).insert(text)
+      shape.text_size = 0.4/dbu
+      
+      #Pin2
+      t = Trans(Trans.R90, -(s2/2)/dbu, (w1/2+d)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+      pin_t = pin.transformed(t)
+      shapes(LayerPinRecN).insert(pin_t)
+      text = Text ("pin2", t)
+      shape = shapes(LayerPinRecN).insert(text)
+      shape.text_size = 0.4/dbu       
+      
+      #Pin3
+      t = Trans(Trans.R90, xnext[0]/dbu+(s1+s2/2)/dbu, (w1/2+d)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+      pin_t = pin.transformed(t)
+      shapes(LayerPinRecN).insert(pin_t)
+      text = Text ("pin3", t)
+      shape = shapes(LayerPinRecN).insert(text)
+      shape.text_size = 0.4/dbu        
+      
+      #Pin4
+      t = Trans(Trans.R90, xnext[0]/dbu+(s1+s2/2)/dbu, (w1/2)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w1/dbu) 
+      pin_t = pin.transformed(t)
+      shapes(LayerPinRecN).insert(pin_t)
+      text = Text ("pin4", t)
+      shape = shapes(LayerPinRecN).insert(text)
+      shape.text_size = 0.4/dbu   
+          
+class SiEPIC_EBeam_ELUAN(Library):
+  """
+  The library where we will put the PCells and GDS into
+  """
+
+  def __init__(self):
+
+    tech_name = 'EBeam'
+    library = tech_name+'-STEPHDEV-Eluan'
+
+    print("Initializing '%s' Library." % library)
+
+
+    # Set the description
+# windows only allows for a fixed width, short description
+    self.description = ""
+# OSX does a resizing:
+#    self.description = "Beta layouts only"
+
+    # Create the PCell declarations
+    self.layout().register_pcell("SWG_MMI", SWG_MMI()) ## change the name for the specific compount
+
+    # Register us the library with the technology name
+    # If a library with that name already existed, it will be replaced then.
+    self.register(library)
+
+# Setup path to load .py files in present folder:
+#import os, inspect, sys
+#path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+#if not path in sys.path:
+#  sys.path.append(path)
+
+# Instantiate and register the library
+SiEPIC_EBeam_ELUAN()
+          </text>
+</klayout-macro>
