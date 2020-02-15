@@ -74,7 +74,7 @@ The package serves as an add-on for the SiEPIC PDK which includes the SWG-based 
 
 - **SWG crossing:** a fixed cell to build the SWG crossing.
 
-<img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/crossing.png" width = "600">
+<img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/crossing.png" width = "450">
 
 - **SWG Y-branch:**
 
