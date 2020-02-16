@@ -38,10 +38,11 @@ The package serves as an add-on for the SiEPIC PDK which includes the SWG-based 
 <img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/fig7.png" width="275">
 
 
-- **SWG edge coupler:** a fixed cell to build the 80-um-long SWG edge coupler.
+- **SWG edge coupler:** a fixed cell to build the 80-um-long SWG edge coupler. Details of the simulation can be found below.
 
 
 <img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/fig8.png" width="450">
+<img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/swg-edgecoupler-dis.png width="450">
 
 - **SWG taper:** a parameterizable cell to build the SWG taper waveguide with adjustable parameters, including waveguide widths on both side, waveguide length, period and duty cycle. 
 
