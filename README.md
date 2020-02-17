@@ -80,7 +80,9 @@ The package serves as an add-on for the SiEPIC PDK which includes the SWG-based 
 
 <img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/swgcrossing.png" width = "550">
 
-- **SWG Y-branch:**
+- **SWG Y-branch:** a fixed cell to build the SWG Y-branch. Simulation results are shown below.
+
+<img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/y-swg.png" width = "550">
 
 - **SWG MMI:** a parameterizable cell to build the SWG MMI with adjustable parameters, including MMI width, MMI length, SWG period, duty cycle, SWG taper length and port distance.
 
