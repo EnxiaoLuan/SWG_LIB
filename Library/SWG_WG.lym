@@ -34,7 +34,7 @@ class SWG_WG(pya.PCellDeclarationHelper):
       TECHNOLOGY = get_technology_by_name('EBeam')
 
       # declare the parameters
-      self.param("pitch", self.TypeDouble, "Period [um]", default = 0.2)
+      self.param("pitch", self.TypeDouble, "Period [um]", default = 0.24)
       self.param("ff", self.TypeDouble, "Duty Cycle", default = 0.5)
       self.param("w", self.TypeDouble, "SWG-WG Width [um]", default = 0.5)
       self.param("Length", self.TypeDouble, "SWG-WG Length [um]", default = 10)
@@ -78,79 +78,70 @@ class SWG_WG(pya.PCellDeclarationHelper):
       
       if Length &lt;= 2*pitch:
         Length = pitch*3
-        print('invalid length of SWG waveguide, set length at least 1*period of SWG')
+        print('invalid length of SWG waveguide, set length at least 3*period of SWG')
     
 
 
 
       # Draw the first SWG-block Waveguides 
-      #calulate ideal length of bus
+      #calulate ideal pitch of bus
       bus_length = Length
-      constant = math.ceil(bus_length/(s1+s2))
+      constant = math.ceil(bus_length/(s1+s2)) # ceil is the larger integer
       if bus_length % (s1+s2) != 0:
-        bus_length = constant*(s1+s2)   
+        #bus_length = constant*(s1+s2)   
+        s11=(bus_length/(constant))*ff
+        s22 = (bus_length/(constant))*(1-ff)
+        pitch1 = s11+s22
         
 
-        xo = [-(w/2),(w/2),(w/2),-(w/2)]
-        yo = [0,0,s1,s1]
+        yo = [0,0,w,w]
+        xo = [0,s11,s11,0]
         dpts=[pya.DPoint(xo[i], yo[i]) for i in range(len(xo))]
         dpolygon = DPolygon(dpts)
         element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
         shapes(LayerSiN).insert(element)   
         
         # draw the SWG waveguide from the center one to +/- positions    
-        for i in range(0,int(math.ceil((constant)/2))):
-          yu = [yo[j]+i*pitch for j in range(len(yo))]
-          yd = [yo[j]-i*pitch for j in range(len(yo))]
+        for i in range(0,int(math.ceil(constant))):
+          xnext = [xo[j]+i*pitch1 for j in range(len(xo))]
+          #yd = [yo[j]-i*pitch for j in range(len(yo))]
             
-          dpts=[pya.DPoint(xo[i], yu[i]) for i in range(len(xo))]
+          dpts=[pya.DPoint(xnext[i], yo[i]) for i in range(len(xnext))]
           dpolygon = DPolygon(dpts)
           element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
-          shapes(LayerSiN).insert(element)
-          dpts=[pya.DPoint(xo[i], yd[i]) for i in range(len(xo))]
-          dpolygon = DPolygon(dpts)
-          element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
-          shapes(LayerSiN).insert(element)         
-
+          shapes(LayerSiN).insert(element)        
     
       #DEV BOX
-      dev = Box(-(w/2)/dbu, yd[-4]/dbu - (s2/2)/dbu, self.cell.bbox().width()-(w/2)/dbu,yu[-1]/dbu + (s2/2)/dbu)
+      dev = Box(0,0, self.cell.bbox().width()+((s2)/dbu),w/dbu)
       shapes(LayerDevRecN).insert(dev)
-      dev_width = self.cell.bbox().width()/2
-      
-      dev_up = yu[-1]/dbu + (s2/2)/dbu 
-      dev_down = yd[-4]/dbu - (s2/2)/dbu
       
       
       # Create the pins on the waveguides, as short paths:
       #from SiEPIC._globals import PIN_LENGTH as pin_length
       pin_length = (s2/2)/dbu
-      w = to_itype(self.w,dbu) 
-      Length = to_itype(Length/2,dbu)
+      #w = to_itype(self.w,dbu) 
   
       #Pin1
-      t = Trans(Trans.R0, xo[-1]/dbu+w/2,dev_up)
-      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w) 
+      t = Trans(Trans.R90, -(s2/2)/dbu,(w/2)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w/dbu) 
       pin_t = pin.transformed(t)
       shapes(LayerPinRecN).insert(pin_t)
       text = Text ("pin1", t)
       shape = shapes(LayerPinRecN).insert(text)
       shape.text_size = 0.4/dbu
-
       
-      #Pin2
-      t = Trans(Trans.R0, xo[-1]/dbu+w/2,dev_down)
-      pin = Path([Point(0, pin_length), Point(0, -pin_length)], w)
+      # Pin2
+      t = Trans(Trans.R90, Length/dbu-(s22)/dbu+(s2/2)/dbu,(w/2)/dbu)
+      pin = Path([Point(0, -pin_length), Point(0, pin_length)], w/dbu) 
       pin_t = pin.transformed(t)
       shapes(LayerPinRecN).insert(pin_t)
       text = Text ("pin2", t)
       shape = shapes(LayerPinRecN).insert(text)
       shape.text_size = 0.4/dbu
-      
+            
 
 
 
-      
 class SiEPIC_EBeam_dev(Library):
   """
   The library where we will put the PCells and GDS into
