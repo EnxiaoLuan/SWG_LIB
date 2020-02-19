@@ -90,6 +90,10 @@ The package serves as an add-on for the SiEPIC PDK which includes the SWG-based 
 
 - **SWG grating coupler:**
 
+- **SWG s-bend:** a parameterizable cell to build the SWG s-bend component with adjustable parameters, inclduing the total length, offset height, the radius, pitch and duty cycle.
+
+<img src="https://raw.githubusercontent.com/EnxiaoLuan/Pics/master/sbend.png" width="700">
+
 ## Technical Support
 
 The principle of Sub-Wavelength has long been known by Hertz in the late 19th century by using a fine grid of parallel metal wires as a polarizer. The first observation at optical wavelength was achieved by Bernhard in 1967, where the reflection from the corneas of night-flying moths is reduced to protect them from nocturnal predators.
