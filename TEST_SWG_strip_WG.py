@@ -1,0 +1,365 @@
+# $autorun
+import sys
+import os
+#temp add path of file to sys, removed at bottom
+file_location = os.path.dirname(os.path.realpath(__file__))
+print(file_location)
+sys.path.append(file_location)
+
+print(sys.path) # to check if the opeartion folder has been added into sys.path
+##################################################################
+import pya
+from pya import *
+import math
+from SiEPIC.utils import get_technology, get_technology_by_name
+from SiEPIC.scripts import path_to_waveguide
+from SiEPIC.extend import to_itype
+
+# Import functions from SiEPIC-Tools, and get technology details
+from SiEPIC.utils import select_paths, get_layout_variables
+TECHNOLOGY, lv, ly, cell = get_layout_variables()
+dbu = ly.dbu
+from SiEPIC.extend import to_itype
+#################################################################
+
+import WGbuilding 
+curve_line = WGbuilding.curveclass()
+#the core function to draw the waveguide line and find SWB center points and angles
+#formation: curve_line_func(self, xo, xn, pitch, eqn_key, params)
+#################################################################
+
+MODULE_NUMPY = True
+
+dbu = 0.001
+
+###############################################################
+# 1. SWG_block component:
+
+class SWG_block(pya.PCellDeclarationHelper):
+    def __init__(self):
+
+      # Important: initialize the super class
+      super(SWG_block, self).__init__()
+      TECHNOLOGY = get_technology_by_name('EBeam')
+
+      # declare the parameters
+      self.param("xc", self.TypeDouble, "X center coordinate", default = 0)
+      self.param("yc", self.TypeDouble, "Y center coordinate", default = 0)
+      self.param("w", self.TypeDouble, "SWG Width [um]", default = 0.5)
+      self.param("l", self.TypeDouble, "SWG Length [um]", default = 0.12)     
+      self.param("angle", self.TypeDouble, "SWG block angle [deg]", default = 10)
+      self.param("layer", self.TypeLayer, "Layer", default = TECHNOLOGY['Waveguide'])
+      self.param("pinrec", self.TypeLayer, "PinRec Layer", default = TECHNOLOGY['PinRec'])
+      self.param("devrec", self.TypeLayer, "DevRec Layer", default = TECHNOLOGY['DevRec'])
+
+    #def display_text_impl(self):
+      # Provide a descriptive text for the cell
+      #return "SWG_block_width_%.3f um" % \
+      #(self.w)
+
+    def coerce_parameters_impl(self):
+       pass
+
+    def can_create_from_shape(self, layout, shape, layer):
+        return False
+        
+    def produce_impl(self):
+      from SiEPIC._globals import PIN_LENGTH
+      # This is the main part of the implementation: create the layout
+
+      # fetch the parameters
+      dbu = self.layout.dbu
+      ly = self.layout
+      shapes = self.cell.shapes
+      LayerSi = self.layer
+      LayerSiN = ly.layer(LayerSi)
+      LayerPinRecN = ly.layer(self.pinrec)
+      LayerDevRecN = ly.layer(self.devrec)
+      TextLayerN = cell.layout().layer(TECHNOLOGY['Text'])
+      
+      #variables for user to design
+      xc = self.xc
+      yc = self.yc
+      w = self.w
+      l = self.l
+      angle = self.angle
+      
+      if l <= 0.06:
+        l = 0.06
+        print('invalid length of SWG block, set length at least 60 nm')
+        
+      # draw the Si block from left bot to left top direction
+      s = math.sqrt(w**2+l**2)/2
+      alpha = math.degrees(math.atan(l/w))
+      theta1 = (alpha-angle)*pi/180
+      theta2 = (alpha+angle)*pi/180
+      x = [xc-s*math.sin(theta1), xc+s*math.sin(theta2), xc+s*math.sin(theta1), xc-s*math.sin(theta2)]
+      y = [yc-s*math.cos(theta1), yc-s*math.cos(theta2), yc+s*math.cos(theta1), yc+s*math.cos(theta2)]
+      
+      dpts=[pya.DPoint(x[i], y[i]) for i in range(len(x))]
+      dpolygon = DPolygon(dpts)
+      element = Polygon.from_dpoly(dpolygon*(1.0/dbu))
+      shapes(LayerSiN).insert(element)   
+      
+      print("SWG_block done!")
+      
+##############################################################
+# 2. PCells: SWG_straight_waveguide
+
+class SWG_line(pya.PCellDeclarationHelper):
+    def __init__(self):
+
+      # Important: initialize the super class
+      super(SWG_line, self).__init__()
+      TECHNOLOGY = get_technology_by_name('EBeam')
+
+      # declare the parameters
+      self.param("xo", self.TypeDouble, "Start point [xo]", default = 0)
+      self.param("xn", self.TypeDouble, "End point [xn]", default = 10)
+      self.param("pitch", self.TypeDouble, "SWG pitch [um]", default = 0.24)
+      self.param("params", self.TypeDouble, "Slope of line", default = 1)  
+      self.param("w", self.TypeDouble, "Width of WG [um]", default = 0.5)
+      self.param("l", self.TypeDouble, "Length of WG-block [um]", default = 0.12)   
+
+      self.param("layer", self.TypeLayer, "Layer", default = TECHNOLOGY['Waveguide'])
+      self.param("pinrec", self.TypeLayer, "PinRec Layer", default = TECHNOLOGY['PinRec'])
+      self.param("devrec", self.TypeLayer, "DevRec Layer", default = TECHNOLOGY['DevRec'])
+
+
+    def coerce_parameters_impl(self):
+       pass
+
+    def can_create_from_shape(self, layout, shape, layer):
+        return False
+        
+    def produce_impl(self):
+      from SiEPIC._globals import PIN_LENGTH
+      # This is the main part of the implementation: create the layout
+      
+      xo = self.xo
+      xn = self.xn
+      pitch = self.pitch
+      params = self.params
+      w = self.w
+      l = self.l
+    
+      eqn_key = "Line"
+      
+      dbu = self.layout.dbu
+      ly = self.layout
+      shapes = self.cell.shapes
+      LayerSi = self.layer
+      LayerSiN = ly.layer(LayerSi)
+      LayerPinRecN = ly.layer(self.pinrec)
+      LayerDevRecN = ly.layer(self.devrec)
+      TextLayerN = self.cell.layout().layer(TECHNOLOGY['Text'])
+      
+      # call the step function from the WGbuilding
+      array = curve_line.step_func(xo, xn, pitch, eqn_key, [params]) #  array = curve_line.step_func(xo, xn, pitch, eqn_key, [params])
+      xcord = array[0]
+      ycord = array[1]
+      rotat = array[2]
+      
+
+      #cell = self.cell.layout().create_cell("SWG_line")
+      #t = Trans(Trans.R0, 0, 0)
+      ## place the cell in the top cell
+      #self.cell.insert(CellInstArray(cell.cell_index(), t))
+      
+      
+      for i in range(0,len(xcord)):
+        pcell= ly.create_cell("SWG_block","EBeam-STEPHDEV-Eluan", {"xc": xcord[i], "yc": ycord[i], "w": w, "l": l, "angle":rotat[i],"pinrec":pya.LayerInfo(0, 0), "devrec":pya.LayerInfo(0, 0)}) 
+        t = Trans(Trans.R0, 0, 0)
+        self.cell.insert(CellInstArray(pcell.cell_index(),t))
+      
+      print("SWG_line done!")
+      
+#########################################################            
+# 3. PCells: SWG_S_line, sigmoid shape SWG waveguide:
+
+class SWG_S_line(pya.PCellDeclarationHelper):
+    def __init__(self):
+
+      # Important: initialize the super class
+      super(SWG_S_line, self).__init__()
+      TECHNOLOGY = get_technology_by_name('EBeam')
+
+      # declare the parameters
+      self.param("xo", self.TypeDouble, "Start point [xo]", default = -10)
+      self.param("xn", self.TypeDouble, "End point [xn]", default = 10)
+      self.param("pitch", self.TypeDouble, "SWG pitch [um]", default = 0.24)
+      self.param("params1", self.TypeDouble, "S-shape height", default = 1)  
+      self.param("params2", self.TypeDouble,"Sharpness", default = 1)
+      self.param("w", self.TypeDouble, "Width of WG [um]", default = 0.5)
+      self.param("l", self.TypeDouble, "Length of WG-block [um]", default = 0.12)   
+
+      self.param("layer", self.TypeLayer, "Layer", default = TECHNOLOGY['Waveguide'])
+      self.param("pinrec", self.TypeLayer, "PinRec Layer", default = TECHNOLOGY['PinRec'])
+      self.param("devrec", self.TypeLayer, "DevRec Layer", default = TECHNOLOGY['DevRec'])
+
+
+    def coerce_parameters_impl(self):
+       pass
+
+    def can_create_from_shape(self, layout, shape, layer):
+        return False
+        
+    def produce_impl(self):
+      from SiEPIC._globals import PIN_LENGTH
+      # This is the main part of the implementation: create the layout
+      
+      xo = self.xo
+      xn = self.xn
+      pitch = self.pitch
+      params1 = self.params1
+      params2 = self.params2
+      w = self.w
+      l = self.l
+    
+      eqn_key = "Sigmoid"
+      
+      dbu = self.layout.dbu
+      ly = self.layout
+      shapes = self.cell.shapes
+      LayerSi = self.layer
+      LayerSiN = ly.layer(LayerSi)
+      LayerPinRecN = ly.layer(self.pinrec)
+      LayerDevRecN = ly.layer(self.devrec)
+      TextLayerN = self.cell.layout().layer(TECHNOLOGY['Text'])
+      
+      # call the step function from the WGbuilding
+      array = curve_line.step_func(xo, xn, pitch, eqn_key, [params1, params2]) #  array = curve_line.step_func(xo, xn, pitch, eqn_key, [params])
+      xcord = array[0]
+      ycord = array[1]
+      rotat = array[2]
+      
+
+      #cell = self.cell.layout().create_cell("SWG_line")
+      #t = Trans(Trans.R0, 0, 0)
+      ## place the cell in the top cell
+      #self.cell.insert(CellInstArray(cell.cell_index(), t))
+      
+      
+      for i in range(0,len(xcord)):
+        pcell= ly.create_cell("SWG_block","EBeam-STEPHDEV-Eluan", {"xc": xcord[i], "yc": ycord[i], "w": w, "l": l, "angle":rotat[i],"pinrec":pya.LayerInfo(0, 0), "devrec":pya.LayerInfo(0, 0)}) 
+        t = Trans(Trans.R0, 0, 0)
+        self.cell.insert(CellInstArray(pcell.cell_index(),t))
+      
+      print("SWG_S_line done!")
+
+
+##################################################################
+# 4. PCells: lorentzian-shape SWG waveguide:
+
+class SWG_loren_line(pya.PCellDeclarationHelper):
+    def __init__(self):
+
+      # Important: initialize the super class
+      super(SWG_loren_line, self).__init__()
+      TECHNOLOGY = get_technology_by_name('EBeam')
+
+      # declare the parameters
+      self.param("xo", self.TypeDouble, "Start point [xo]", default = 0)
+      self.param("xn", self.TypeDouble, "End point [xn]", default = 10)
+      self.param("pitch", self.TypeDouble, "SWG pitch [um]", default = 0.24)
+      self.param("params1", self.TypeDouble, "Peak height", default = 1)  
+      self.param("params2", self.TypeDouble,"Sharpness", default = 1)
+      self.param("w", self.TypeDouble, "Width of WG [um]", default = 0.5)
+      self.param("l", self.TypeDouble, "Length of WG-block [um]", default = 0.12)   
+
+      self.param("layer", self.TypeLayer, "Layer", default = TECHNOLOGY['Waveguide'])
+      self.param("pinrec", self.TypeLayer, "PinRec Layer", default = TECHNOLOGY['PinRec'])
+      self.param("devrec", self.TypeLayer, "DevRec Layer", default = TECHNOLOGY['DevRec'])
+
+
+    def coerce_parameters_impl(self):
+       pass
+
+    def can_create_from_shape(self, layout, shape, layer):
+        return False
+        
+    def produce_impl(self):
+      from SiEPIC._globals import PIN_LENGTH
+      # This is the main part of the implementation: create the layout
+      
+      xo = self.xo
+      xn = self.xn
+      pitch = self.pitch
+      params1 = self.params1
+      params2 = self.params2
+      w = self.w
+      l = self.l
+    
+      eqn_key = "Lorentzian"
+      
+      dbu = self.layout.dbu
+      ly = self.layout
+      shapes = self.cell.shapes
+      LayerSi = self.layer
+      LayerSiN = ly.layer(LayerSi)
+      LayerPinRecN = ly.layer(self.pinrec)
+      LayerDevRecN = ly.layer(self.devrec)
+      TextLayerN = self.cell.layout().layer(TECHNOLOGY['Text'])
+      
+      # call the step function from the WGbuilding
+      array = curve_line.step_func(xo, xn, pitch, eqn_key, [params1, params2]) #  array = curve_line.step_func(xo, xn, pitch, eqn_key, [params])
+      xcord = array[0]
+      ycord = array[1]
+      rotat = array[2]
+      
+
+      #cell = self.cell.layout().create_cell("SWG_line")
+      #t = Trans(Trans.R0, 0, 0)
+      ## place the cell in the top cell
+      #self.cell.insert(CellInstArray(cell.cell_index(), t))
+      
+      
+      for i in range(0,len(xcord)):
+        pcell= ly.create_cell("SWG_block","EBeam-STEPHDEV-Eluan", {"xc": xcord[i], "yc": ycord[i], "w": w, "l": l, "angle":rotat[i],"pinrec":pya.LayerInfo(0, 0), "devrec":pya.LayerInfo(0, 0)}) 
+        t = Trans(Trans.R0, 0, 0)
+        self.cell.insert(CellInstArray(pcell.cell_index(),t))
+      
+      print("SWG_loren_line done!")
+
+####################################
+#################################### 
+class SiEPIC_EBeam_SWG_dev(Library):
+  """
+  The library where we will put the PCells and GDS into
+  """
+
+  def __init__(self):
+
+    tech_name = 'EBeam'
+    library = tech_name+'-STEPHDEV-Eluan'
+
+    print("Initializing '%s' Library." % library)
+
+
+    # Set the description
+# windows only allows for a fixed width, short description
+    self.description = ""
+# OSX does a resizing:
+#    self.description = "Beta layouts only"
+
+    # Create the PCell declarations
+    self.layout().register_pcell("SWG_block", SWG_block())
+    self.layout().register_pcell("SWG_line", SWG_line()) ## change the name for the specific compount
+    self.layout().register_pcell("SWG_S_line", SWG_S_line())
+    self.layout().register_pcell("SWG_loren_line", SWG_loren_line())    
+    # Register us the library with the technology name
+    # If a library with that name already existed, it will be replaced then.
+    self.register(library)
+
+# Setup path to load .py files in present folder:
+#import os, inspect, sys
+#path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+#if not path in sys.path:
+#  sys.path.append(path)
+
+# Instantiate and register the library
+SiEPIC_EBeam_SWG_dev()
+ 
+    
+#remove path from sys ###########################################################
+sys.path.remove(file_location)
